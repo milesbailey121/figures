@@ -27,8 +27,8 @@ library(gplots)
 
 set.seed(123)
 class_colors <- c(Luminal = "#51abcb", BnL = "#f8766d",Basal = "red", `Blood Vessel` = "#a3a500", LnB = "#00b0f6",Undefined = "grey")
-Diag <- brewer.pal(4,'Set2')
-Hist <- brewer.pal(5, 'Set2')
+Diag <- brewer.pal(4,'Pastel1')
+Hist <- brewer.pal(5, 'Pastel2')
 
 cells <- read_csv("E:/Final Data/quantification/joined_data.csv")
 patient_data <- read_csv("E:/[1]Datasets/[5]Quantification/log/patient_metadata.csv")
@@ -92,7 +92,7 @@ ggplot(as.data.frame(table(patient_data$type[!(patient_data$type == "Undefined")
   geom_bar(stat = "identity")+
   labs(x = "Pathology Classificaiton", y = "Number of Images") +
   theme_pubr()+
-  scale_fill_manual("Pathology Classificaiton",values =c("gray","#e8e54f","#e84fe0","lightblue"))+
+  scale_fill_manual("Pathology Classificaiton",values =c("gray","#f2edb6","#f2b6f2","lightblue"))+
   scale_y_continuous(breaks = seq(0, 200, by = 10))+
   geom_text(aes(label = paste("n = ", Freq), vjust = 0))
 
@@ -119,6 +119,12 @@ cells <- cells %>%
 names(cells)[names(cells) == "Filename"] <- "imageNb"
 names(cells)[names(cells) == "centroid-0"] <- "Pos_X"
 names(cells)[names(cells) == "centroid-1"] <- "Pos_Y"
+
+
+
+ggplot(cells[cells$Type == "Edge",], aes(x = factor(AGE), y = (ANAX1)))+
+  geom_boxplot()
+
 
 
 #----------------------------------------------------------------------------------------------------------#
@@ -186,12 +192,14 @@ ggplot(cells,aes(x = CK8))+
   scale_y_continuous(name="Cell Counts",labels = comma)+
   theme_pubr()
 
+
 #----------------------------------------------------------------------------------------------------------#
 #                                        Marker expression Plots                                           #
 #----------------------------------------------------------------------------------------------------------#
-kruskal.test(ANAX1 ~ class * Histology_description, data = cells)
+kruskal.test(ANAX1 ~ class, data = cells)
 
-cells$interaction_var <- interaction(cells$class, cells$Histology_description)
+pairwise.wilcox.test(cells$weight, PlantGrowth$group,
+                     p.adjust.method = "BH")
 
 # Pairwise Wilcoxon test with Bonferroni adjustment and interaction
 pairwise.wilcox.test(cells$ANAX1, cells$interaction_var, p.adjust.method = "bonferroni")
@@ -204,6 +212,8 @@ ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "
   geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = class_colors)+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
+  xlab(label = "Cancer Type")+
+  ylab(label = "ANAX1 expression(a.u.)")+
   theme_pubr()+
   stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
   facet_wrap(~cells$Type[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")& !(is.na(cells$Type))])
@@ -212,9 +222,11 @@ ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "
        aes(x = Type, y = ANAX1, fill = Type)) +
   geom_violin() +
   geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
-  scale_fill_manual(values = c("gray","#e8e54f","#e84fe0"))+
+  scale_fill_manual(values = c("gray","#f2edb6","#f2b6f2"))+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr() +
+  xlab(label = "Cancer Type")+
+  ylab(label = "ANAX1 expression(a.u.)")+
   facet_wrap(~ class) +
   stat_compare_means(method = "wilcox.test", label = "p.signif",comparisons = list(c("Normal","Edge"),c("Normal","Tumour"),c("Edge","Tumour"))) +
   labs(title = "ANAX1 Expression by Type Faceted by Class")
@@ -224,15 +236,17 @@ ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "
   geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = class_colors)+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
+  ylab(label = "ANAX1 expression(a.u.)")+
   theme_pubr()+
   stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
   facet_wrap(~cells$diagnosis[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")])
 
-ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal"),],
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal"),],
        aes(x = diagnosis, y = ANAX1, fill = diagnosis)) +
   geom_violin() +
   geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = Diag)+
+  ylab(label = "ANAX1 expression(a.u.)")+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr() +
   facet_wrap(~ class) +
@@ -249,11 +263,12 @@ ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "
   stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
   facet_wrap(~cells$Histology_description[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")])
 
-ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal"),],
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal"),],
        aes(x = Histology_description, y = ANAX1, fill = Histology_description)) +
   geom_violin() +
   geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = Hist)+
+  ylab(label = "ANAX1 expression(a.u.)")+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr() +
   facet_wrap(~ class) +
@@ -268,6 +283,7 @@ ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "
   geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = class_colors)+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
+  ylab(label = "ANAX1 expression(a.u.)")+
   theme_pubr()+
   stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
   facet_wrap(~cells$Type[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")& !(is.na(cells$Type))])
@@ -278,6 +294,7 @@ ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "
   geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = c("gray","#e8e54f","#e84fe0"))+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
+ylab(label = "ANAX1 expression(a.u.)")+
   theme_pubr() +
   facet_wrap(~ class) +
   stat_compare_means(method = "wilcox.test", label = "p.signif",comparisons = list(c("Normal","Edge"),c("Normal","Tumour"),c("Edge","Tumour"))) +
@@ -469,6 +486,35 @@ ggplot(type_summary, aes(x = Type, y = percentage, fill = class)) +
        x = "Type",
        y = "Percentage",
        fill = "Class") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme_pubr() 
+
+#----------------------------------------------------------------------------------------------------------#
+#                                             Proliferating                                               #
+#----------------------------------------------------------------------------------------------------------#
+
+
+proliferating_summary <- cells[!(is.na(cells$Type)),] %>%
+  group_by(Type,proliferating,class) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(Type) %>%
+  mutate(percentage = (count / sum(count)) * 100) %>%
+  ungroup() %>%
+  select(Type, proliferating, percentage,class)
+
+# Plot for Diagnosis
+ggplot(proliferating_summary[proliferating_summary$proliferating == "Positive",], aes(x = Type, y = percentage, fill = class)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.25, size = 3) +
+  coord_cartesian(ylim = c(0, 100))+
+  labs(title = "Percentage of Proliferating cells by Diagnosis",
+       x = "Diagnosis",
+       y = "Percentage",
+       fill = "Class") +
+  scale_fill_manual(values = class_colors)+
+  scale_y_continuous(name="Percentage of cells",breaks = seq(0, 100, by = 10) ,labels = function(x) paste0(x,"%"))+
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   theme_pubr() 
 
