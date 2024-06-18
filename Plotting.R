@@ -26,7 +26,7 @@ library(gplots)
 
 
 set.seed(123)
-class_colors <- c(Luminal = "#51abcb", Basal = "red", `Blood Vessel` = "green", Undefined = "grey")
+class_colors <- c(Luminal = "#51abcb", BnL = "#f8766d",Basal = "red", `Blood Vessel` = "#a3a500", LnB = "#00b0f6",Undefined = "grey")
 Diag <- brewer.pal(4,'Set2')
 Hist <- brewer.pal(5, 'Set2')
 
@@ -125,25 +125,25 @@ names(cells)[names(cells) == "centroid-1"] <- "Pos_Y"
 #                                        Classification                                                    #
 #----------------------------------------------------------------------------------------------------------#
 
-# cells <- cells %>%
-#   mutate(class = case_when(
-#     (SMA >= 1.5) & (ECAD >= 1.5)~ "BnL",
-#     (SMA >= 1.5) & (CK8 >= 1.5)~ "LnB",
-#     CK8 >= 1.5 ~ "Luminal",
-#     ECAD >= 1.5 ~ "Luminal",
-#     SMA >= 1.5 ~ "Basal",
-#     CD31 >= 1.5 ~ "Blood Vessel",
-#     TRUE ~ "Undefined"
-#   ))
-
 cells <- cells %>%
   mutate(class = case_when(
+    (SMA >= 1) & (ECAD >= 1)~ "BnL",
+    (SMA >= 1) & (CK8 >= 1)~ "LnB",
     CK8 >= 1 ~ "Luminal",
-    ECAD >= 1~ "Luminal",
+    ECAD >= 1 ~ "Luminal",
     SMA >= 1 ~ "Basal",
     CD31 >= 1 ~ "Blood Vessel",
     TRUE ~ "Undefined"
   ))
+
+# cells <- cells %>%
+#   mutate(class = case_when(
+#     CK8 >= 1 ~ "Luminal",
+#     ECAD >= 1~ "Luminal",
+#     SMA >= 1 ~ "Basal",
+#     CD31 >= 1 ~ "Blood Vessel",
+#     TRUE ~ "Undefined"
+#   ))
 
 cells <- cells %>% 
   mutate(proliferating = case_when(
@@ -163,10 +163,12 @@ cells <- cells %>%
 cells$Type <- factor(cells$Type, levels = c("Normal", "Edge", "Tumour"))
 cells$diagnosis <- factor(cells$diagnosis, levels = c("Luminal A","Luminal B","HER2 enriched","Triple negative"))
 cells$Histology_description <- factor(cells$Histology_description, levels = c("DCIS","Invasive ductal","Lobular","Papillary","Mixed"))
+cells$class <- factor(cells$class, levels = c("Basal","BnL","Luminal","LnB","Blood Vessel","Undefined"))
 
 ggplot(cells,aes(x = ECAD))+
   geom_density(stat = "bin",fill = "lightblue")+
   scale_y_continuous(name="Cell Counts",labels = comma)+
+  scale_y_continuous(name="Cell Counts",breaks = seq(0, 110000, by = 10000) ,labels = comma)+
   theme_pubr()
 
 ggplot(unfiltered_cells,aes(x = ECAD))+
@@ -174,175 +176,117 @@ ggplot(unfiltered_cells,aes(x = ECAD))+
   scale_y_continuous(name="Cell Counts",breaks = seq(0, 400000, by = 50000) ,labels = comma)+
   theme_pubr()
 
-ggplot(cells,aes(x = CK8))+
-  geom_histogram(stat = "bin",fill = "grey")
+ggplot(unfiltered_cells,aes(x = CK8))+
+  geom_density(stat = "bin",fill = "lightblue")+
+  scale_y_continuous(name="Cell Counts",breaks = seq(0, 700000, by = 100000) ,labels = comma)+
+  theme_pubr()
 
+ggplot(cells,aes(x = CK8))+
+  geom_density(stat = "bin",fill = "lightblue")+
+  scale_y_continuous(name="Cell Counts",labels = comma)+
+  theme_pubr()
 
 #----------------------------------------------------------------------------------------------------------#
 #                                        Marker expression Plots                                           #
 #----------------------------------------------------------------------------------------------------------#
+kruskal.test(ANAX1 ~ class * Histology_description, data = cells)
 
-for (marker in markers_columns){
-  label_title <- paste(marker, "expression")
-  print(ggplot(cells[(cells$class == "Luminal" | cells$class == "Basal"),], aes(y = .data[[marker]], x = class)) +
-          geom_boxplot(aes(fill = class))+
-          # geom_boxplot(width=.1, outlier.shape=NA) +
-          labs(x = "Patient Classification", y = label_title, title = "Scatter plot of Marker Correlations") +
-          stat_compare_means(method = "t.test",label = "p.signif", comparisons = c("Luminal","Basal"))+
-          facet_wrap(~cells$Type[(cells$class == "Luminal" | cells$class == "Basal")])+
-          theme_pubr()
-  )
-}
+cells$interaction_var <- interaction(cells$class, cells$Histology_description)
 
-for (marker in markers_columns){
-  label_title <- paste(marker, "expression")
-  print(ggplot(cells[(cells$class == "Luminal" | cells$class == "Basal"),], aes(y = .data[[marker]], x = class)) +
-          geom_boxplot(aes(fill = class))+
-          labs(x = "Patient Histology" , y = label_title, title = "Scatter plot of Marker Correlations") +
-          facet_wrap(~cells$Histology_description[(cells$class == "Luminal" | cells$class == "Basal")])+
-          theme_pubr()
-  )
-}
+# Pairwise Wilcoxon test with Bonferroni adjustment and interaction
+pairwise.wilcox.test(cells$ANAX1, cells$interaction_var, p.adjust.method = "bonferroni")
 
-for (marker in markers_columns){
-  label_title <- paste(marker, "expression")
-  print(ggplot(cells[(cells$class == "Luminal" | cells$class == "Basal"),], aes(y = .data[[marker]], x = diagnosis)) +
-          geom_boxplot(aes(fill = class),outlier.shape=NA)+
-          labs(x = "Patient Diagnosis", y = label_title, title = "Violin plot of marker expression in different molecular subtypes") +
-          # facet_wrap(~cells$diagnosis[(cells$class == "Luminal" | cells$class == "Basal")])+
-          theme_pubr()
-  )
-}
+pairwise.wilcox.test(cells$ANAX1, cells$Histology_description, p.adjust.method = "bonferroni")
 
-stat.test <- cells[cells$class == "Basal" | cells$class == "Luminal",] %>%
-  group_by(diagnosis) %>%
-  t_test(ANAX1 ~ class) %>%
-  adjust_pvalue(method = "bonferroni") %>%
-  add_significance("p.adj") %>%
-  add_xy_position(x = "diagnosis", dodge = 1) 
 
-ggplot(cells[(cells$class == "Basal" | cells$class == "Luminal"),], aes(x = diagnosis, y = ANAX1))+
-  geom_violin(aes(fill = class))+
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")& !(is.na(cells$Type)),],aes(x = class, y = ANAX1,fill = class))+
+  geom_violin()+
+  geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
+  scale_fill_manual(values = class_colors)+
+  scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr()+
-  scale_y_continuous(breaks = seq(0, 2.6, by=0.5))+
-  stat_compare_means(method = "anova",label = "p.signif", label.y = 2.6, label.x = 2.45)+
-  stat_pvalue_manual(stat.test, label = "{p.adj.signif}", tip.length = 0.008, y.position = 2.5)+
-  theme(legend.position = "top")
+  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
+  facet_wrap(~cells$Type[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")& !(is.na(cells$Type))])
 
-ggplot(cells[cells$class == "Basal" | cells$class == "Luminal",], aes(x = proliferating, y = ANAX1))+
-  geom_boxplot(aes(fill = class))+
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal") & !(is.na(cells$Type)),],
+       aes(x = Type, y = ANAX1, fill = Type)) +
+  geom_violin() +
+  geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
+  scale_fill_manual(values = c("gray","#e8e54f","#e84fe0"))+
+  scale_y_continuous(breaks = seq(0, 13, by = 1)) +
+  theme_pubr() +
+  facet_wrap(~ class) +
+  stat_compare_means(method = "wilcox.test", label = "p.signif",comparisons = list(c("Normal","Edge"),c("Normal","Tumour"),c("Edge","Tumour"))) +
+  labs(title = "ANAX1 Expression by Type Faceted by Class")
+
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal"),],aes(x = class, y = ANAX1,fill = class))+
+  geom_violin()+
+  geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
+  scale_fill_manual(values = class_colors)+
+  scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr()+
-  scale_y_continuous(breaks = seq(0, 2.6, by=0.5))+
-  theme(legend.position = "top")+
-  stat_compare_means(method = "anova",label = "p.signif")+
-  facet_wrap(~cells$Histology_description[cells$class == "Basal" | cells$class == "Luminal"])
+  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
+  facet_wrap(~cells$diagnosis[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")])
 
-
-
-
-
-
-# Plot violin plot
-ggplot(cells[(cells$class == "Basal" | cells$class == "Luminal"),], aes(x = Histology_description, y = ANAX1)) +
-  geom_violin(aes(fill = class)) +
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal"),],
+       aes(x = diagnosis, y = ANAX1, fill = diagnosis)) +
+  geom_violin() +
+  geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
+  scale_fill_manual(values = Diag)+
+  scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr() +
-  scale_y_continuous(breaks = seq(0, 2.6, by = 0.5)) +
-  stat_compare_means(method = "anova", label = "p.signif", label.y = 2.6, label.x = 2.45) +
-  stat_pvalue_manual(stat.test, label = "{p.adj.signif}", tip.length = 0.008, y.position = 2.5) +
-  theme(legend.position = "top") 
-
-ggplot(cells[cells$class == "Luminal",], aes(x = Histology_description, y = ANAX1))+
-  geom_violin(fill = "#51abcb")+
-  geom_boxplot(width = .1,outlier.shape=NA)+
-  stat_compare_means(method = "anova", label = "p.signif", label.y = 2.6, label.x = 2.45) +
-  theme_pubr()
-
-create_violin_plot <- function(marker, diagnosis_col) {
-  # Subset the data for the desired classes
-  subset_cells <- cells[(cells$class == "Basal" | cells$class == "Luminal") & !(is.na(cells$Type)),]
-  
-  
-  # Convert marker to numeric if it is not
-  subset_cells[[marker]] <- as.numeric(as.character(subset_cells[[marker]]))
-  
-  # Generate the statistical test
-  stat.test <- subset_cells %>%
-    group_by(.data[[diagnosis_col]]) %>%
-    t_test(as.formula(paste(marker, "~ Type"))) %>%
-    adjust_pvalue(method = "bonferroni") %>%
-    add_significance("p.adj") %>%
-    add_xy_position(x = diagnosis_col)
-  
-  # Create the ggplot
-  plot <- ggplot(subset_cells, aes(x = .data[[diagnosis_col]], y = .data[[marker]])) +
-    geom_boxplot(aes(fill = class)) +
-    labs(x = "Patient Diagnosis", y = paste(marker, "expression"), title = "Violin plot of marker expression in different molecular subtypes") +
-    theme_pubr() +
-    # scale_y_continuous(breaks = seq(0, 2.6, by = 0.5)) +
-    stat_pvalue_manual(stat.test, label = "{p.adj.signif}", tip.length = 0.008) +
-    theme(legend.position = "top")
-  
-  print(plot)
-}
-
-# Example usage:
-create_violin_plot("ANAX1", "Type")
-  
-
-table(cells$class[cells$proliferating == "Positive"])
-
-table(cells$proliferating)
-ca#----------------------------------------------------------------------------------------------------------#
-#                                        Cell Count Plots                                                  #
-#----------------------------------------------------------------------------------------------------------#
+  facet_wrap(~ class) +
+  stat_compare_means(method = "kruskal.test", label = "p.signif") +
+  labs(title = "ANAX1 Expression by Type Faceted by Class")
 
 
-cell_counts <- cells[] %>%
-  group_by(imageNb, Type, class, diagnosis, Histology_description,proliferating) %>%
-  summarise(Count = n()) %>%
-  ungroup()
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal"),],aes(x = class, y = ANAX1,fill = class))+
+  geom_violin()+
+  geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
+  scale_fill_manual(values = class_colors)+
+  scale_y_continuous(breaks = seq(0, 13, by = 1)) +
+  theme_pubr()+
+  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
+  facet_wrap(~cells$Histology_description[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")])
 
-
-ggplot(cell_counts, aes(x =Type, y = Count, fill = class)) +
-  geom_bar(stat = "identity",position = "dodge") +
-  labs(x = "Image Type", y = "Cell Count", fill = "Cell type") +
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal"),],
+       aes(x = Histology_description, y = ANAX1, fill = Histology_description)) +
+  geom_violin() +
+  geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
+  scale_fill_manual(values = Hist)+
+  scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_y_continuous(name="Cell Counts",breaks = seq(0, 1000000, by = 100000) ,labels = comma)+
-  ggtitle("Proportion of Cells in Each Image")
+  facet_wrap(~ class) +
+  stat_compare_means(method = "kruskal.test", label = "p.signif") +
+  labs(title = "ANAX1 Expression by Type Faceted by Class")
 
 
-ggplot(cells, aes(x = Type, fill = class))+
-  geom_bar(stat = "count",position = "dodge")
 
 
-cell_counts <- cell_counts %>%
-  group_by(Type) %>%
-  mutate(Percentage = Count / sum(Count))
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")& !(is.na(cells$Type)),],aes(x = class, y = ECAD,fill = class))+
+  geom_violin()+
+  geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
+  scale_fill_manual(values = class_colors)+
+  scale_y_continuous(breaks = seq(0, 13, by = 1)) +
+  theme_pubr()+
+  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
+  facet_wrap(~cells$Type[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")& !(is.na(cells$Type))])
 
-cell_counts$Percentage <- as.numeric(cell_counts$Percentage)
-
-
-ggplot(cell_counts, aes(x = Type, y = Percentage, fill = class)) +
-  geom_bar(stat = "identity") +
-  scale_y_continuous(labels = scales::percent_format(scale = 100),breaks = seq(0, 1, by = 0.1)) +
-  labs(x = "Image", y = "Percentage of Cell Types", fill = "Cell Class") +
+ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal") & !(is.na(cells$Type)),],
+       aes(x = Type, y = ANAX1, fill = Type)) +
+  geom_violin() +
+  geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
+  scale_fill_manual(values = c("gray","#e8e54f","#e84fe0"))+
+  scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  ggtitle("Percentage proportion of cell types")
+  facet_wrap(~ class) +
+  stat_compare_means(method = "wilcox.test", label = "p.signif",comparisons = list(c("Normal","Edge"),c("Normal","Tumour"),c("Edge","Tumour"))) +
+  labs(title = "ANAX1 Expression by Type Faceted by Class")
 
 
-ggplot(cell_counts, aes(x = Type, y = Percentage, fill = class)) +
-  geom_bar(stat = "identity") +
-  scale_y_continuous(labels = scales::percent_format(scale = 1)) + # Correct percentage scaling
-  labs(x = "Diagnosis", y = "Percentage", fill = "Cell Type") +
-  theme_pubr() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  ggtitle("Proportion of Cells in Each Diagnosis") +
-  facet_wrap(~ class, scales = "free_y")
-  
 
-#-------------------------------------------------------------------------------------------------------#
+
+#----------------------------------------------------------------------------------------------------------#  
 create_violin_plot <- function(marker, cell_type) {
   plt1 <- ggplot(cells[(cells$class == cell_type & !(is.na(cells$Type))),],aes(x = Type, y = .data[[marker]],fill = Type))+
     geom_violin()+
@@ -361,7 +305,7 @@ create_violin_plot <- function(marker, cell_type) {
     scale_fill_manual(values = Diag)+
     scale_y_continuous(breaks = seq(0, max(cells[,marker]), by = (max(cells[,marker]) / 10))) +
     theme_pubr()+
-    stat_compare_means(method = "anova",label = "p.signif", label.y = max(cells[,marker]),label.x = 0.5)
+    stat_compare_means(method = "kruskal.test",label = "p.signif", label.y = max(cells[,marker]),label.x = 0.5)
   
   plt3 <-ggplot(cells[(cells$class == cell_type),],aes(x = Histology_description, y = .data[[marker]],fill = Histology_description))+
     geom_violin()+
@@ -370,7 +314,7 @@ create_violin_plot <- function(marker, cell_type) {
     scale_fill_manual(values = Hist)+
     scale_y_continuous(breaks = seq(0, max(cells[,marker]), by = (max(cells[,marker])) / 10)) +
     theme_pubr()+
-    stat_compare_means(method = "anova",label = "p.signif", label.y = max(cells[,marker]),label.x = 0.6)
+    stat_compare_means(method = "kruskal.test",label = "p.signif", label.y = max(cells[,marker]),label.x = 0.6)
   
   print(plt1)
   print(plt2)
@@ -378,86 +322,272 @@ create_violin_plot <- function(marker, cell_type) {
 }
 
 
+create_violin_plot("ANAX1","BnL")
+create_violin_plot("ANAX1","Luminal")
 
 for (marker in markers_columns) {
   create_violin_plot(marker,"Luminal")
 }
 
+
+for (marker in markers_columns) {
+  create_violin_plot(marker,"BnL")
+}
+
+
+for (marker in markers_columns) {
+  create_violin_plot(marker,"LnB")
+}
+
+
 for (marker in markers_columns) {
   create_violin_plot(marker,"Basal")
 }
 
+for (marker in markers_columns) {
+  create_violin_plot(marker,"Undefined")
+}
 
+
+#----------------------------------------------------------------------------------------------------------#
+#                                        Cell Count Plots                                                  #
+#----------------------------------------------------------------------------------------------------------#
+
+
+# cell_counts <- cells[] %>%
+#   group_by(imageNb, Type, class, diagnosis, Histology_description,proliferating) %>%
+#   summarise(Count = n()) %>%
+#   ungroup()
+# 
+# 
+# ggplot(cell_counts, aes(x =Type, y = Count, fill = class)) +
+#   geom_bar(stat = "identity",position = "dodge") +
+#   labs(x = "Image Type", y = "Cell Count", fill = "Cell type") +
+#   theme_pubr() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#   scale_y_continuous(name="Cell Counts",breaks = seq(0, 1000000, by = 100000) ,labels = comma)+
+#   ggtitle("Proportion of Cells in Each Image")
+# 
+# 
+# ggplot(cells, aes(x = Type, fill = class))+
+#   geom_bar(stat = "count",position = "dodge")
+# 
+# 
+# cell_counts <- cell_counts %>%
+#   group_by(diagnosis) %>%
+#   mutate(Percentage = Count / sum(Count))
+# 
+# cell_counts$Percentage <- as.numeric(cell_counts$Percentage)
+# 
+# 
+# ggplot(cell_counts, aes(x = diagnosis, y = Percentage, fill = class)) +
+#   geom_bar(stat = "identity") +
+#   scale_y_continuous(labels = scales::percent_format(scale = 100),breaks = seq(0, 1, by = 0.1)) +
+#   labs(x = "Image", y = "Percentage of Cell Types", fill = "Cell Class") +
+#   scale_fill_manual(fill())
+#   theme_pubr() +
+#   ggtitle("Percentage proportion of cell types")
+# 
+# 
+# ggplot(cell_counts, aes(x = Type, y = Percentage, fill = class)) +
+#   geom_bar(stat = "identity") +
+#   scale_y_continuous(labels = scales::percent_format(scale = 1)) + # Correct percentage scaling
+#   labs(x = "Diagnosis", y = "Percentage", fill = "Cell Type") +
+#   theme_pubr() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#   ggtitle("Proportion of Cells in Each Diagnosis") +
+#   facet_wrap(~ class, scales = "free_y")
+  
+
+diagnosis_summary <- cells %>%
+  group_by(diagnosis, class) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(diagnosis) %>%
+  mutate(percentage = (count / sum(count)) * 100) %>%
+  ungroup() %>%
+  select(diagnosis, class, percentage)
+
+# Plot for Diagnosis
+ggplot(diagnosis_summary, aes(x = diagnosis, y = percentage, fill = class)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.25, size = 2) +
+  coord_cartesian(ylim = c(0, 100))+
+  labs(title = "Percentage of Cell Types by Diagnosis",
+       x = "Diagnosis",
+       y = "Percentage",
+       fill = "Class") +
+  scale_y_continuous(name="Percentage of cells",breaks = seq(0, 100, by = 10) ,labels = function(x) paste0(x,"%"))+
+  scale_fill_manual(values = class_colors)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme_pubr() 
+
+histology_summary <- cells %>%
+  group_by(Histology_description, class) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(Histology_description) %>%
+  mutate(percentage = (count / sum(count)) * 100) %>%
+  ungroup() %>%
+  select(Histology_description, class, percentage)
+
+# Plot for Histology
+ggplot(histology_summary, aes(x = Histology_description, y = percentage, fill = class)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.25, size = 2) +
+  coord_cartesian(ylim = c(0, 100))+
+  scale_fill_manual(values = class_colors)+
+  scale_y_continuous(name="Percentage of cells",breaks = seq(0, 100, by = 10) ,labels = function(x) paste0(x,"%"))+
+  labs(title = "Percentage of Cell Types by Histology",
+       x = "Histology",
+       y = "Percentage",
+       fill = "Class") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme_pubr() 
+
+# Generate the summary table for type
+type_summary <- cells[!(is.na(cells$Type)),] %>%
+  group_by(Type, class) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(Type) %>%
+  mutate(percentage = (count / sum(count)) * 100) %>%
+  ungroup() %>%
+  select(Type, class, percentage)
+
+# Plot for Type
+ggplot(type_summary, aes(x = Type, y = percentage, fill = class)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.25, size = 3) +
+  coord_cartesian(ylim = c(0, 100))+
+  scale_fill_manual(values = class_colors)+
+  scale_y_continuous(name="Percentage of cells",breaks = seq(0, 100, by = 10) ,labels = function(x) paste0(x,"%"))+
+  labs(title = "Percentage of Cell Types by Type",
+       x = "Type",
+       y = "Percentage",
+       fill = "Class") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme_pubr() 
+
+
+
+
+#-------------------------------------------------------------------------------------------------------#http://127.0.0.1:21445/graphics/29b151d0-99ae-4286-b8ce-06e54833382d.png
 #----------------------------------------------------------------------------------------------------------#
 #                                             Heatmaps                                                     #
 #----------------------------------------------------------------------------------------------------------#
 
 
-# Select relevant columns (adjust column names if needed)
-markers <- cells %>% select(`Local Patient ID`, CD31, CK5, SMA, Ki67, CK8, ANAX1, ECAD, PCNT, CCASP3)
 
-# Aggregate data: calculate the mean of each marker for each Local Patient ID
-marker_means <- markers %>%
-  group_by(`Local Patient ID`) %>%
-  summarise(across(CD31:CCASP3, mean, na.rm = TRUE)) %>% 
-  sort(`Local Patient ID`,decreaing = FALSE)
- 
+anova_model <- aov(ANAX1 ~ class * Histology_description, data = cells)
 
-# Convert Local Patient ID to row names
-row.names(marker_means) <- marker_means$`Local Patient ID`
-marker_means <- marker_means %>% select(-`Local Patient ID`)
+posthoc_class <- glht(anova_model, linfct = mcp(class = "Tukey"))
+posthoc_histology <- glht(anova_model, linfct = mcp(Histology_description = "Tukey"))
 
-# Normalize or scale the data if needed
-marker_means_scaled <- marker_means
+interaction_term <- interaction(cells$class, cells$Histology_description)
+cells$interaction_term <- interaction_term
 
-# Generate the heatmap
-pheatmap(marker_means_scaled, 
-         main = "Summary Heatmap of Average Marker Values by Local Patient ID", 
-         clustering_distance_rows = "euclidean", 
-         clustering_distance_cols = "euclidean", 
-         clustering_method = "complete", 
-         color = colorRampPalette(c("navy", "white", "firebrick3"))(50))
+# Fit a new ANOVA model with the interaction term explicitly
+anova_model_interaction <- aov(ANAX1 ~ interaction_term, data = cells)
+
+# Post-hoc analysis for the interaction term
+posthoc_interaction <- glht(anova_model_interaction, linfct = mcp(interaction_term = "Tukey"))
+
+# Create a boxplot for visualization
+ggplot(cells, aes(x = interaction(class, Histology_description), y = ANAX1, fill = class)) +
+  geom_boxplot() +
+  labs(title = "ANAX1 Expression by Cell Type and Histology", x = "Cell Type and Histology", y = "ANAX1 Expression") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+interaction.plot(cells$class, cells$Histology_description, cells$ANAX1,
+                 col = c("red", "blue", "green", "purple", "orange"),
+                 legend = TRUE, xlab = "Cell Type", ylab = "ANAX1 Expression",
+                 main = "Interaction Plot of ANAX1 Expression by Cell Type and Histology")
+ggplot(cells, aes(x = class, y = ANAX1, fill = class)) +
+  geom_boxplot() +
+  facet_wrap(~ Histology_description) +
+  labs(title = "ANAX1 Expression by Cell Type and Histology", x = "Cell Type", y = "ANAX1 Expression") +
+  theme_minimal()
+
+# Calculate means for heatmap
+mean_expression <- cells[cells$class == "Basal" | cells$class == "BnL" | cells$class == "Luminal",] %>%
+  group_by(class, Type) %>%
+  summarise(mean_ANAX1 = mean(ANAX1, na.rm = TRUE)) %>%
+  spread(Type, mean_ANAX1)
+
+# Convert to matrix for pheatmap
+mean_expression_matrix <- as.matrix(mean_expression[, -1])
+rownames(mean_expression_matrix) <- mean_expression$class
+
+# Draw heatmap
+pheatmap(mean_expression_matrix, cluster_rows = FALSE, cluster_cols = FALSE,
+         main = "Heatmap of Mean ANAX1 Expression",
+         color = colorRampPalette(c("blue", "white", "red"))(100))
+
+
+mean_expressions <- cells %>%
+  group_by(class) %>%
+  summarise(across(markers_columns, mean, na.rm = TRUE)) %>%
+  pivot_longer(cols = markers_columns, names_to = "Marker", values_to = "Mean_Expression")
+
+# Reshape data to wide format for heatmap
+mean_expressions_wide <- mean_expressions %>%
+  pivot_wider(names_from = class, values_from = Mean_Expression)
+
+# Convert to matrix for pheatmap
+mean_expression_matrix <- as.matrix(mean_expressions_wide[,-1])
+rownames(mean_expression_matrix) <- mean_expressions_wide$Marker
+
+# Draw heatmap
+pheatmap(mean_expression_matrix, cluster_rows = TRUE, cluster_cols = TRUE,
+         main = "Heatmap of Mean Marker Expressions",
+         color = inferno(100),
+         fontsize_col = 10, angle_col = 45)
+
+
+mean_expressions <- cells %>%
+  group_by(Full_Filename) %>%
+  summarise(across(markers_columns, \(x) mean(x, na.rm = TRUE)))
 
 
 
+rowna <- mean_expressions[,1]
+colna <- colnames(mean_expressions[markers_columns[!(markers_columns == "Nuclear")]])
+mean_expressions_matrix <- as.matrix(mean_expressions[markers_columns[!(markers_columns == "Nuclear")]])
+
+rownames(mean_expressions_matrix) <- rowna$Full_Filename
+colnames(mean_expressions_matrix) <- colna
+
+subset_patients <- rownames(mean_expressions_matrix)[1:100]
+mean_expressions_subset <- mean_expressions_matrix[subset_patients, ]
 
 
+pheatmap(mean_expressions_matrix,
+         clustering_distance_rows = "euclidean",  # Distance metric for row clustering
+         clustering_distance_cols = "euclidean",  # Distance metric for column clustering
+         clustering_method = "complete",  # Clustering method
+         row_dendrogram = TRUE,  # Display row dendrogram
+         col_dendrogram = TRUE,  # Display column dendrogram
+         scale = "row",  # Scale rows (optional)
+         main = "Clustered Heatmap of Mean Marker Expressions by Patient",
+         fontsize = 8,
+         fontsize_row = 1,
+         color = inferno(100)) 
 
-
-
-
-rnames <- cells[1:4000,"imageNb"]
-mat_data <- data.matrix(cells[1:4000,markers_columns])
-rnames <- make.unique(as.character(rnames))
-rownames(mat_data) <- rnames
-pheatmap(mat_data)
-
-
-# Check the unique values in diagnosis and histology descriptions
-unique_diagnosis <- unique(cells$diagnosis)
-unique_histology <- unique(cells$Histology_description)
-
-# Perform stratified sampling
-sampled_data <- cells %>%
-  group_by(diagnosis, Histology_description) %>%
-  filter(n() > 1) %>% # Ensure groups with more than one sample
-  sample_n(min(5, n())) %>% # Adjust the number '5' to ensure adequate sampling
-  ungroup()
-
-markers_scaled <- sampled_data[,markers_columns]
-
-for (marker in colnames(markers_scaled)) {
-  # Extract the marker data
-  marker_data <- markers_scaled[, marker, drop = FALSE]
-  
-  # Generate the heatmap
-  pheatmap(marker_data, 
-           main = paste("Heatmap of", marker), 
-           clustering_distance_rows = "euclidean", 
-           clustering_distance_cols = "euclidean", 
-           clustering_method = "complete", 
-           color = colorRampPalette(c("navy", "white", "firebrick3"))(50))
-}
+pheatmap(mean_expressions_subset,
+         clustering_distance_rows = "euclidean",
+         clustering_distance_cols = "euclidean",
+         clustering_method = "complete",
+         row_dendrogram = TRUE,
+         col_dendrogram = TRUE,
+         scale = "row",
+         main = "Clustered Heatmap of Mean Marker Expressions by Patient (Subset)",
+         fontsize = 8,
+         fontsize_row = 6,
+         color = inferno(100))
 
 #----------------------------------------------------------------------------------------------------------#
 #                                           UMAP Plots                                                     #
@@ -492,11 +622,12 @@ for (marker in colnames(markers_scaled)) {
 
 # 
 # Create SCE objects
-cells <- cells[cells$Type == "Normal",]
-df <- cells %>% filter_at(vars(Type), all_vars(!is.na(.)))
+subset_cells <- cells[cells$Full_Filename == "Mx_BEGIN TMA NORMAL_A08.ome.tif",]
+# subset_cells <- cells[cells$Full_Filename == "Mx_BEGIN TMA TUMOUR_A11.ome.tif",]
+# df <- cells %>% filter_at(vars(Type), all_vars(!is.na(.)))
 cells$fname <- NULL
-counts <- cells[,markers_columns]
-cell_meta <- cells[, !(names(cells) %in% markers_columns)]
+counts <- subset_cells[,markers_columns]
+cell_meta <- subset_cells[, !(names(subset_cells) %in% markers_columns)]
 sce <- SingleCellExperiment(assays = list(counts = t(counts)))
 colData(sce) <- as(cell_meta, "DataFrame")
 
@@ -506,8 +637,13 @@ spe <- buildSpatialGraph(sce, img_id = "imageNb", type = "expansion", threshold 
 
 
 # 
-# plotSpatial(spe[,spe$imageNb == "Mx_BEGIN TMA NORMAL_A08.ome_4032_5376_4544_5888.tiff"],img_id = "imageNb", coords = c("Pos_Y","Pos_X"), colPairName = "expansion_interaction_graph", draw_edges = TRUE,
-#             node_size_by = "area", node_color_by = "class")
+plotSpatial(spe[,spe$imageNb == "Mx_BEGIN TMA NORMAL_A08.ome_4928_4032_5440_4544.tiff"],img_id = "imageNb", coords = c("Pos_Y","Pos_X"), colPairName = "expansion_interaction_graph", draw_edges = FALSE,
+            node_size_fix = 5, node_color_by = "class") + scale_color_manual(values = class_colors)
+
+
+
+# plotSpatial(spe[,spe$imageNb == "Mx_BEGIN TMA TUMOUR_A11.ome_4480_1792_4992_2304.tiff"],img_id = "imageNb", coords = c("Pos_Y","Pos_X"), colPairName = "expansion_interaction_graph", draw_edges = FALSE,
+#             node_size_fix = 5, node_color_by = class_colors)
 # 
 # cur_cells <- head(cells,n = 4000)
 # 
@@ -553,56 +689,77 @@ spe <- buildSpatialGraph(sce, img_id = "imageNb", type = "expansion", threshold 
 
 
 
+# for (marker in markers_columns){
+#   label_title <- paste(marker, "expression")
+#   print(ggplot(cells[(cells$class == "Luminal" | cells$class == "Basal"),], aes(y = .data[[marker]], x = class)) +
+#           geom_boxplot(aes(fill = class))+
+#           # geom_boxplot(width=.1, outlier.shape=NA) +
+#           labs(x = "Patient Classification", y = label_title, title = "Scatter plot of Marker Correlations") +
+#           stat_compare_means(method = "t.test",label = "p.signif", comparisons = c("Luminal","Basal"))+
+#           facet_wrap(~cells$Type[(cells$class == "Luminal" | cells$class == "Basal")])+
+#           theme_pubr()
+#   )
+# }
+# 
+# for (marker in markers_columns){
+#   label_title <- paste(marker, "expression")
+#   print(ggplot(cells[(cells$class == "Luminal" | cells$class == "Basal"),], aes(y = .data[[marker]], x = class)) +
+#           geom_boxplot(aes(fill = class))+
+#           labs(x = "Patient Histology" , y = label_title, title = "Scatter plot of Marker Correlations") +
+#           facet_wrap(~cells$Histology_description[(cells$class == "Luminal" | cells$class == "Basal")])+
+#           theme_pubr()
+#   )
+# }
+# 
+# for (marker in markers_columns){
+#   label_title <- paste(marker, "expression")
+#   print(ggplot(cells[(cells$class == "Luminal" | cells$class == "Basal"),], aes(y = .data[[marker]], x = diagnosis)) +
+#           geom_boxplot(aes(fill = class),outlier.shape=NA)+
+#           labs(x = "Patient Diagnosis", y = label_title, title = "Violin plot of marker expression in different molecular subtypes") +
+#           # facet_wrap(~cells$diagnosis[(cells$class == "Luminal" | cells$class == "Basal")])+
+#           theme_pubr()
+#   )
+# }
+# 
+# stat.test <- cells[cells$class == "BnL" | cells$class == "Luminal",] %>%
+#   group_by(diagnosis) %>%
+#   t_test(ANAX1 ~ class) %>%
+#   adjust_pvalue(method = "bonferroni") %>%
+#   add_significance("p.adj") %>%
+#   add_xy_position(x = "diagnosis", dodge = 1) 
+# 
+# ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal"),], aes(x = diagnosis, y = ANAX1))+
+#   geom_violin(aes(fill = class))+
+#   theme_pubr()+
+#   scale_y_continuous(breaks = seq(0, 2.6, by=0.5))+
+#   stat_compare_means(method = "anova",label = "p.signif", label.y = 2.6, label.x = 2.45)+
+#   stat_pvalue_manual(stat.test, label = "{p.adj.signif}", tip.length = 0.008, y.position = 2.5)+
+#   theme(legend.position = "top")
+# 
+# ggplot(cells[cells$class == "Basal" | cells$class == "Luminal",], aes(x = proliferating, y = ANAX1))+
+#   geom_boxplot(aes(fill = class))+
+#   theme_pubr()+
+#   scale_y_continuous(breaks = seq(0, 2.6, by=0.5))+
+#   theme(legend.position = "top")+
+#   stat_compare_means(method = "anova",label = "p.signif")+
+#   facet_wrap(~cells$Histology_description[cells$class == "Basal" | cells$class == "Luminal"])
+# 
+# 
+# 
+# 
+# 
+# # Plot violin plot
+# ggplot(cells[!(cells$class == "Undefined"),], aes(x = class, y = ANAX1)) +
+#   geom_violin(aes(fill = class)) +
+#   theme_pubr() +
+#   scale_y_continuous(breaks = seq(0, 10, by = 2)) +
+#   theme(legend.position = "top")+
+#   facet_wrap(~cells$Histology_description[!(cells$class == "Undefined")])
+# 
+# ggplot(cells[cells$class == "Luminal",], aes(x = Histology_description, y = ANAX1))+
+#   geom_violin(fill = "#51abcb")+
+#   geom_boxplot(width = .1,outlier.shape=NA)+
+#   stat_compare_means(method = "anova", label = "p.signif", label.y = 2.6, label.x = 2.45) +
+#   theme_pubr()
 
-create_violin_plot <- function(marker, cell_type) {
-  
-  # Filter data for the specific cell type and marker
-  subset_data <- cells[cells$class == cell_type & !is.na(cells$Type), ]
-  
-  # Create a plotting dataframe with "Normal" added
-  normal_data <- data.frame(Type = "Normal", marker_value = subset_data[[marker]])
-  plotting_df <- rbind(subset_data, normal_data)
-  
-  plt1 <- ggplot(plotting_df, aes(x = Type, y = marker_value, fill = Type)) +
-    geom_violin() +
-    geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2) +
-    scale_fill_manual(values = c("gray", "#e8e54f", "#e84fe0")) +
-    labs(x = "Type Classification", y = paste(marker, "marker expression (a.u.)")) +
-    scale_y_continuous(breaks = seq(0, 15, by = 1)) +
-    theme_pubr() +
-    stat_compare_means(method = "t.test", label = "p.signif", 
-                       comparisons = list(c("Normal", "Edge"), c("Normal", "Tumour"), c("Edge", "Tumour")))
-  
-  plt2 <- ggplot(plotting_df, aes(x = diagnosis, y = marker_value, fill = diagnosis)) +
-    geom_violin() +
-    geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2) +
-    labs(x = "Patient Diagnosis", y = paste(marker, "marker expression (a.u.)")) +
-    scale_fill_manual(values = c("#1f78b4", "#33a02c", "#ff7f00", "#e31a1c", "#bdbdbd")) +
-    scale_y_continuous(breaks = seq(0, 15, by = 1)) +
-    theme_pubr() +
-    stat_compare_means(method = "anova", label = "p.format", label.y = 11, label.x = 0.5)
-  
-  plt3 <- ggplot(plotting_df, aes(x = Histology_description, y = marker_value, fill = Histology_description)) +
-    geom_violin() +
-    geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2) +
-    labs(x = "Tumour Histology", y = paste(marker, "marker expression (a.u.)")) +
-    scale_fill_manual(values = c("#1f78b4", "#33a02c", "#ff7f00", "#e31a1c", "#6a3d9a", "#bdbdbd")) +
-    scale_y_continuous(breaks = seq(0, 15, by = 1)) +
-    theme_pubr() +
-    stat_compare_means(method = "anova", label = "p.format", label.y = 11, label.x = 0.6)
-  
-  # Print or return the plots
-  print(plt1)
-  print(plt2)
-  print(plt3)
-}
-
-create_violin_plot("ANAX1","Luminal")
-
-
-
-
-
-plotting <- data.frame(cells[,markers_columns],cells$Type,cells$diagnosis,cells$Histology_description)
-normal_df <- cells[cells$Type == "Normal",]
 
