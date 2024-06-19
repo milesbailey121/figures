@@ -22,6 +22,7 @@ library(patchwork)
 library(cowplot)
 library(viridis)
 library(gplots)
+library(insight)
 
 
 
@@ -191,7 +192,87 @@ ggplot(cells,aes(x = CK8))+
   geom_density(stat = "bin",fill = "lightblue")+
   scale_y_continuous(name="Cell Counts",labels = comma)+
   theme_pubr()
+#----------------------------------------------------------------------------------------------------------#
+#                                           Summary Stats                                                  #
+#----------------------------------------------------------------------------------------------------------#
 
+type_summary_stats <- cells[!(is.na(cells$Type)),] %>%
+  group_by(Type) %>%
+  summarise(
+    count = n(),
+    mean_value = mean(ANAX1, na.rm = TRUE),
+    median_value = median(ANAX1, na.rm = TRUE),
+    sd_value = sd(ANAX1, na.rm = TRUE)
+  )
+
+histology_summary_stats <- cells %>%
+  group_by(Histology_description) %>%
+  summarise(
+    count = n(),
+    mean_value = mean(ANAX1, na.rm = TRUE),
+    median_value = median(ANAX1, na.rm = TRUE),
+    sd_value = sd(ANAX1, na.rm = TRUE)
+  )
+
+diagnosis_summary_stats <- cells %>%
+  group_by(diagnosis) %>%
+  summarise(
+    count = n(),
+    mean_value = mean(ANAX1, na.rm = TRUE),
+    median_value = median(ANAX1, na.rm = TRUE),
+    sd_value = sd(ANAX1, na.rm = TRUE)
+  )
+
+summary_stats <- type_summary_stats
+differences <- data.frame(
+  Comparison = c("Normal - Edge", "Normal - Tumour", "Edge - Tumour"),
+  mean_difference = c(
+    summary_stats$mean_value[1] - summary_stats$mean_value[2],
+    summary_stats$mean_value[1] - summary_stats$mean_value[3],
+    summary_stats$mean_value[2] - summary_stats$mean_value[3]
+  ),
+  median_difference = c(
+    summary_stats$median_value[1] - summary_stats$median_value[2],
+    summary_stats$median_value[1] - summary_stats$median_value[3],
+    summary_stats$median_value[2] - summary_stats$median_value[3]
+  ),
+  sd_difference = c(
+    summary_stats$sd_value[1] - summary_stats$sd_value[2],
+    summary_stats$sd_value[1] - summary_stats$sd_value[3],
+    summary_stats$sd_value[2] - summary_stats$sd_value[3]
+  )
+)
+
+# Print the differences
+print(differences)
+
+# Function to calculate percentage change
+percentage_change <- function(new, old) {
+  ((new - old) / old) * 100
+}
+
+# Calculate percentage changes between types
+percentage_changes <- data.frame(
+  Comparison = c("Normal vs Edge", "Normal vs Tumour", "Edge vs Tumour"),
+  mean_percentage_change = c(
+    percentage_change(summary_stats$mean_value[2], summary_stats$mean_value[1]),
+    percentage_change(summary_stats$mean_value[3], summary_stats$mean_value[1]),
+    percentage_change(summary_stats$mean_value[3], summary_stats$mean_value[2])
+  ),
+  median_percentage_change = c(
+    percentage_change(summary_stats$median_value[2], summary_stats$median_value[1]),
+    percentage_change(summary_stats$median_value[3], summary_stats$median_value[1]),
+    percentage_change(summary_stats$median_value[3], summary_stats$median_value[2])
+  ),
+  sd_percentage_change = c(
+    percentage_change(summary_stats$sd_value[2], summary_stats$sd_value[1]),
+    percentage_change(summary_stats$sd_value[3], summary_stats$sd_value[1]),
+    percentage_change(summary_stats$sd_value[3], summary_stats$sd_value[2])
+  )
+)
+
+# Print the percentage changes
+print(percentage_changes)
 
 #----------------------------------------------------------------------------------------------------------#
 #                                        Marker expression Plots                                           #
@@ -207,7 +288,7 @@ pairwise.wilcox.test(cells$ANAX1, cells$interaction_var, p.adjust.method = "bonf
 pairwise.wilcox.test(cells$ANAX1, cells$Histology_description, p.adjust.method = "bonferroni")
 
 
-ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")& !(is.na(cells$Type)),],aes(x = class, y = ANAX1,fill = class))+
+ggplot(cells[(cells$class == "Luminal")& !(is.na(cells$Type)),],aes(x = class, y = ANAX1,fill = class))+
   geom_violin()+
   geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = class_colors)+
@@ -215,10 +296,9 @@ ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "
   xlab(label = "Cancer Type")+
   ylab(label = "ANAX1 expression(a.u.)")+
   theme_pubr()+
-  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
-  facet_wrap(~cells$Type[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")& !(is.na(cells$Type))])
+  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))
 
-ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal") & !(is.na(cells$Type)),],
+ggplot(cells[(cells$class == "Luminal") & !(is.na(cells$Type)),],
        aes(x = Type, y = ANAX1, fill = Type)) +
   geom_violin() +
   geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
@@ -227,56 +307,50 @@ ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "
   theme_pubr() +
   xlab(label = "Cancer Type")+
   ylab(label = "ANAX1 expression(a.u.)")+
-  facet_wrap(~ class) +
   stat_compare_means(method = "wilcox.test", label = "p.signif",comparisons = list(c("Normal","Edge"),c("Normal","Tumour"),c("Edge","Tumour"))) +
   labs(title = "ANAX1 Expression by Type Faceted by Class")
 
-ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal"),],aes(x = class, y = ANAX1,fill = class))+
+ggplot(cells[(cells$class == "Luminal"),],aes(x = class, y = ANAX1,fill = class))+
   geom_violin()+
   geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = class_colors)+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   ylab(label = "ANAX1 expression(a.u.)")+
   theme_pubr()+
-  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
-  facet_wrap(~cells$diagnosis[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")])
+  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))
 
-ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal"),],
+ggplot(cells[(cells$class == "Luminal"),],
        aes(x = diagnosis, y = ANAX1, fill = diagnosis)) +
   geom_violin() +
   geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = Diag)+
   ylab(label = "ANAX1 expression(a.u.)")+
+  labs(fill='Diagnosis')+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr() +
-  facet_wrap(~ class) +
-  stat_compare_means(method = "kruskal.test", label = "p.signif") +
+  stat_compare_means(method = "kruskal.test",aes(label = paste0("p",scales::label_pvalue()(..p..),"****")),label.x = 0.7, label.y = 11)+
   labs(title = "ANAX1 Expression by Type Faceted by Class")
 
 
-ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal"),],aes(x = class, y = ANAX1,fill = class))+
+ggplot(cells[(cells$class == "Luminal"),],aes(x = class, y = ANAX1,fill = class))+
   geom_violin()+
   geom_boxplot(width=.1, outlier.shape=NA,alpha = .2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = class_colors)+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr()+
-  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))+
-  facet_wrap(~cells$Histology_description[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")])
+  stat_compare_means(method = "wilcox.test", label = "p.signif", comparisons = list(c("Basal","BnL"),c("Basal","Luminal"),c("BnL","Luminal")))
 
-ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal"),],
+ggplot(cells[(cells$class == "Luminal"),],
        aes(x = Histology_description, y = ANAX1, fill = Histology_description)) +
   geom_violin() +
   geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = Hist)+
   ylab(label = "ANAX1 expression(a.u.)")+
+  labs(fill='Histology')+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
   theme_pubr() +
-  facet_wrap(~ class) +
-  stat_compare_means(method = "kruskal.test", label = "p.signif") +
+  stat_compare_means(method = "kruskal.test",aes(label = paste0("p",scales::label_pvalue()(..p..),"****")),label.x = 0.7, label.y = 11)+
   labs(title = "ANAX1 Expression by Type Faceted by Class")
-
-
-
 
 ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "Basal")& !(is.na(cells$Type)),],aes(x = class, y = ECAD,fill = class))+
   geom_violin()+
@@ -292,7 +366,7 @@ ggplot(cells[(cells$class == "BnL" | cells$class == "Luminal" | cells$class == "
        aes(x = Type, y = ANAX1, fill = Type)) +
   geom_violin() +
   geom_boxplot(width = 0.1, outlier.shape = NA, alpha = 0.2, position = position_dodge(width = 0.9)) +
-  scale_fill_manual(values = c("gray","#e8e54f","#e84fe0"))+
+  scale_fill_manual(values = c("gray","#f2edb6","#f2b6f2"))+
   scale_y_continuous(breaks = seq(0, 13, by = 1)) +
 ylab(label = "ANAX1 expression(a.u.)")+
   theme_pubr() +
@@ -473,6 +547,13 @@ type_summary <- cells[!(is.na(cells$Type)),] %>%
   ungroup() %>%
   select(Type, class, percentage)
 
+# Reshape data for chi-square test
+mean_percentages_wide <- type_summary %>%
+  pivot_wider(names_from = class, values_from = percentage)
+
+# Perform chi-square test
+chi_square_result <- chisq.test(mean_percentages_wide[, -1])  # Exclude Molecular_Subtype column
+
 # Plot for Type
 ggplot(type_summary, aes(x = Type, y = percentage, fill = class)) +
   geom_bar(stat = "identity", position = "dodge") +
@@ -487,7 +568,72 @@ ggplot(type_summary, aes(x = Type, y = percentage, fill = class)) +
        y = "Percentage",
        fill = "Class") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  annotate("text", x = 0.9, y = 90,size = 3, label = insight::format_p(chi_square_result$p.value, stars = TRUE,))+
   theme_pubr() 
+
+diagnosis_summary <- cells %>%
+  group_by(diagnosis, class) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(diagnosis) %>%
+  mutate(percentage = (count / sum(count)) * 100) %>%
+  ungroup() %>%
+  select(diagnosis, class, percentage)
+
+# Reshape data for chi-square test
+diagnosis_summary_wide <- diagnosis_summary %>%
+  pivot_wider(names_from = class, values_from = percentage)
+
+# Perform chi-square test
+chi_square_result_diagnosis <- chisq.test(diagnosis_summary_wide[, -1])  # Exclude diagnosis column
+
+# Plot for Diagnosis
+ggplot(diagnosis_summary, aes(x = diagnosis, y = percentage, fill = class)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.25, size = 2) +
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(title = "Percentage of Cell Types by Diagnosis",
+       x = "Diagnosis",
+       y = "Percentage",
+       fill = "Class") +
+  scale_y_continuous(name = "Percentage of cells", breaks = seq(0, 100, by = 10), labels = function(x) paste0(x, "%")) +
+  scale_fill_manual(values = class_colors) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  annotate("text", x = 0.9, y = 90, size = 3, label = insight::format_p(chi_square_result_diagnosis$p.value, stars = TRUE)) +
+  theme_pubr()
+
+histology_summary <- cells %>%
+  group_by(Histology_description, class) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(Histology_description) %>%
+  mutate(percentage = (count / sum(count)) * 100) %>%
+  ungroup() %>%
+  select(Histology_description, class, percentage)
+
+# Reshape data for chi-square test
+histology_summary_wide <- histology_summary %>%
+  pivot_wider(names_from = class, values_from = percentage)
+
+# Perform chi-square test
+chi_square_result_histology <- chisq.test(histology_summary_wide[, -1])  # Exclude Histology_description column
+
+# Plot for Histology
+ggplot(histology_summary, aes(x = Histology_description, y = percentage, fill = class)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.25, size = 2) +
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(title = "Percentage of Cell Types by Histology",
+       x = "Histology",
+       y = "Percentage",
+       fill = "Class") +
+  scale_y_continuous(name = "Percentage of cells", breaks = seq(0, 100, by = 10), labels = function(x) paste0(x, "%")) +
+  scale_fill_manual(values = class_colors) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  annotate("text", x = 1, y = 90, size = 3, label = insight::format_p(chi_square_result_histology$p.value, stars = TRUE)) +
+  theme_pubr()
 
 #----------------------------------------------------------------------------------------------------------#
 #                                             Proliferating                                               #
